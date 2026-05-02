@@ -10,7 +10,7 @@ target/
 .factorypath
 .project
 .settings
-.springBeans
+B.springBeans
 .sts4-cache
 
 ### IntelliJ IDEA ###
@@ -25,9 +25,23 @@ target/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
+bBuild/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
 ### VS Code ###
 .vscode/
+# Secrets — Ne jamais pousser sur GitHub
+.env
+*.env
+application-local.properties
+secrets/
+
+# Java
+target/
+*.class
+*.jar
+
+# Node
+node_modules/
+build/

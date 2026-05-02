@@ -7,11 +7,11 @@ pkill -f node
 sleep 2
 
 echo "Starting backend..."
-cd ~/student-management-devops
+cd ~/student-management
 mvn spring-boot:run &
 
 sleep 5
 
 echo "Starting frontend..."
-cd ~/student-management-devops/student-frontend-react
+cd ~/student-management/student-frontend-react
 npm start
