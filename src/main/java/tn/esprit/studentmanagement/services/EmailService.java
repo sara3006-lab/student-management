@@ -13,6 +13,8 @@ public class EmailService {
 
     public void sendOtpEmail(String toEmail, String otp) {
         try {
+            System.out.println("MAIL USER ENV = " + System.getenv("MAIL_USERNAME"));
+            System.out.println("MAIL PASS ENV = " + System.getenv("MAIL_PASSWORD"));
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper =
                 new MimeMessageHelper(message, true, "UTF-8");

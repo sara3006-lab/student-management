@@ -4,16 +4,18 @@ pipeline {
     tools {
         maven 'maven3'
         jdk 'java21'
-      
     }
 
     environment {
         SONAR_PROJECT_KEY = 'student-management'
         SONAR_TOKEN = credentials('sonar-token')
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        MAIL_USERNAME = credentials('MAIL_USERNAME')
+        MAIL_PASSWORD = credentials('MAIL_PASSWORD')
+        JWT_SECRET = credentials('JWT_SECRET')
+        DB_PASSWORD = credentials('DB_PASSWORD')
         DOCKERHUB_USERNAME = 'sara3006lab'
-        BACKEND_IMAGE = "${DOCKERHUB_USERNAME}/student-backend"
-        FRONTEND_IMAGE = "${DOCKERHUB_USERNAME}/student-frontend"
+        APP_IMAGE = "${DOCKERHUB_USERNAME}/student-management"
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
@@ -29,13 +31,31 @@ pipeline {
 
         stage('🔨 Build Backend') {
             steps {
-                sh 'mvn clean package -DskipTests'
+                withEnv([
+                    "MAIL_USERNAME=${MAIL_USERNAME}",
+                    "MAIL_PASSWORD=${MAIL_PASSWORD}",
+                    "JWT_SECRET=${JWT_SECRET}",
+                    "DB_URL=jdbc:mariadb://127.0.0.1:3306/studentdb",
+                    "DB_USERNAME=root",
+                    "DB_PASSWORD=${DB_PASSWORD}"
+                ]) {
+                    sh 'mvn clean package -DskipTests'
+                }
             }
         }
 
         stage('🧪 Tests Backend') {
             steps {
-                sh 'mvn test jacoco:report'
+                withEnv([
+                    "MAIL_USERNAME=${MAIL_USERNAME}",
+                    "MAIL_PASSWORD=${MAIL_PASSWORD}",
+                    "JWT_SECRET=${JWT_SECRET}",
+                    "DB_URL=jdbc:mariadb://127.0.0.1:3306/studentdb",
+                    "DB_USERNAME=root",
+                    "DB_PASSWORD=${DB_PASSWORD}"
+                ]) {
+                    sh 'mvn test jacoco:report'
+                }
             }
         }
 
@@ -80,8 +100,8 @@ pipeline {
         stage('🧪 Tests Frontend') {
             steps {
                 dir('student-frontend-react') {
-                     sh 'npm install'
-                     sh 'npm test -- --watchAll=false --passWithNoTests || true'
+                    sh 'npm install'
+                    sh 'npm test -- --watchAll=false --passWithNoTests || true'
                 }
             }
         }
@@ -89,58 +109,43 @@ pipeline {
         stage('🛡️ OWASP Dependency Check') {
             steps {
                 dir('student-frontend-react') {
-                     sh 'npm audit --json > npm-audit-report.json || true'
-                     sh 'cat npm-audit-report.json'
-            }
-            sh '''mvn org.owasp:dependency-check-maven:check \
-                -DnvdApiKey=53ae4c6f-a483-4aaf-89f3-b50c7d0cf896 \
-                -DfailBuildOnCVSS=9 \
-                -Dformat=HTML \
-                || true'''
-            }
-        }
-        stage('🐳 Docker Build Backend') {
-            steps {
-                sh "docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} ."
-                sh "docker tag ${BACKEND_IMAGE}:${IMAGE_TAG} ${BACKEND_IMAGE}:latest"
-                echo "✅ Backend image built: ${BACKEND_IMAGE}:${IMAGE_TAG}"
-            }
-        }
-
-        stage('🐳 Docker Build Frontend') {
-            steps {
-                dir('student-frontend-react') {
-                    sh "docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ."
-                    sh "docker tag ${FRONTEND_IMAGE}:${IMAGE_TAG} ${FRONTEND_IMAGE}:latest"
-                    echo "✅ Frontend image built: ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+                    sh 'npm audit --json > npm-audit-report.json || true'
+                    sh 'cat npm-audit-report.json'
                 }
+                sh '''mvn org.owasp:dependency-check-maven:check \
+                    -DnvdApiKey=53ae4c6f-a483-4aaf-89f3-b50c7d0cf896 \
+                    -DfailBuildOnCVSS=9 \
+                    -Dformat=HTML \
+                    || true'''
             }
         }
 
-        stage('🔒 Trivy Scan Backend') {
+        stage('🐳 Docker Build') {
             steps {
                 sh """
-                    trivy image \
-                        --severity HIGH,CRITICAL \
-                        --format table \
-                        --exit-code 0 \
-                        ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                        > trivy-backend-report.txt 2>&1 || true
-                    cat trivy-backend-report.txt
+                    docker build \
+                        --build-arg MAIL_USERNAME=${MAIL_USERNAME} \
+                        --build-arg MAIL_PASSWORD=${MAIL_PASSWORD} \
+                        --build-arg JWT_SECRET=${JWT_SECRET} \
+                        --build-arg DB_PASSWORD=${DB_PASSWORD} \
+                        -t ${APP_IMAGE}:${IMAGE_TAG} \
+                        -t ${APP_IMAGE}:latest \
+                        .
                 """
+                echo "✅ Image construite : ${APP_IMAGE}:${IMAGE_TAG}"
             }
         }
 
-        stage('🔒 Trivy Scan Frontend') {
+        stage('🔒 Trivy Scan') {
             steps {
                 sh """
                     trivy image \
                         --severity HIGH,CRITICAL \
                         --format table \
                         --exit-code 0 \
-                        ${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                        > trivy-frontend-report.txt 2>&1 || true
-                    cat trivy-frontend-report.txt
+                        ${APP_IMAGE}:${IMAGE_TAG} \
+                        > trivy-report.txt 2>&1 || true
+                    cat trivy-report.txt
                 """
             }
         }
@@ -148,16 +153,13 @@ pipeline {
         stage('📤 Push DockerHub') {
             steps {
                 sh "echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin"
-                sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
-                sh "docker push ${BACKEND_IMAGE}:latest"
-                sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
-                sh "docker push ${FRONTEND_IMAGE}:latest"
-                echo "✅ Images pushed to DockerHub !"
+                sh "docker push ${APP_IMAGE}:${IMAGE_TAG}"
+                sh "docker push ${APP_IMAGE}:latest"
+                echo "✅ Image pushée : ${APP_IMAGE}:${IMAGE_TAG}"
             }
         }
 
     }
-
 
     post {
         success {
