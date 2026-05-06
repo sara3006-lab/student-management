@@ -143,6 +143,8 @@ pipeline {
                         --severity HIGH,CRITICAL \
                         --format table \
                         --exit-code 0 \
+                        --timeout 10m \
+                        --no-progress \
                         ${APP_IMAGE}:${IMAGE_TAG} \
                         > trivy-report.txt 2>&1 || true
                     cat trivy-report.txt
